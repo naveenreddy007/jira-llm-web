@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jira LLM Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    .card {
+      margin-bottom: 20px;
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="#">Jira LLM Dashboard</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('dashboard') }}">Projects Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active" href="{{ url_for('llm_dashboard') }}">LLM Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('llm_chat') }}">AI Chat</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h2 class="mb-4">🤖 Jira LLM Features</h2>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    
+    {% if not llm_available %}
+      <div class="alert alert-warning">
+        <strong>⚠️ LLM Service Not Configured</strong>
+        <p>The LLM service is not available. Please check your API keys in the .env file.</p>
+      </div>
+    {% endif %}
+    
+    <div class="row mt-4">
+      <!-- Ticket Analysis Card -->
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="feature-icon text-primary">📊</div>
+            <h5 class="card-title">Ticket Analysis</h5>
+            <p class="card-text">Automatically summarize, categorize, and get insights from your Jira tickets using AI.</p>
+            <a href="{{ url_for('llm_chat') }}?topic=ticket_analysis" class="btn btn-primary" {% if not llm_available %}disabled{% endif %}>
+              Try It
+            </a>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Project Insights Card -->
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="feature-icon text-success">🔍</div>
+            <h5 class="card-title">Project Insights</h5>
+            <p class="card-text">Get AI-powered insights and recommendations based on your project's health and metrics.</p>
+            <a href="{{ url_for('llm_chat') }}?topic=project_insights" class="btn btn-success" {% if not llm_available %}disabled{% endif %}>
+              Try It
+            </a>
+          </div>
+        </div>
+      </div>
+      
+      <!-- AI Chat Card -->
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="feature-icon text-info">💬</div>
+            <h5 class="card-title">AI Assistant</h5>
+            <p class="card-text">Chat with an AI assistant to get answers about your Jira projects, tickets, and workflows.</p>
+            <a href="{{ url_for('llm_chat') }}" class="btn btn-info text-white" {% if not llm_available %}disabled{% endif %}>
+              Start Chatting
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <h3 class="mt-5 mb-3">Your Projects</h3>
+    <div class="row">
+      {% if projects %}
+        {% for project in projects %}
+        <div class="col-md-4 mb-4">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">{{ project.name }}</h5>
+              <p class="card-text"><strong>Key:</strong> {{ project.key }}</p>
+              <a href="{{ url_for('project_tickets', project_key=project.key) }}" class="btn btn-outline-primary">
+                View Tickets
+              </a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="col-12">
+          <p>No projects found or an error occurred.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

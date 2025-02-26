@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Tickets</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    .ticket-card {
+      margin-bottom: 20px;
+      transition: all 0.3s;
+    }
+    .ticket-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .analysis-section {
+      display: none;
+      background-color: #f8f9fa;
+      border-radius: 0 0 5px 5px;
+      padding: 15px;
+      margin-top: 10px;
+    }
+    .loading-spinner {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="#">Jira Dashboard</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('llm_dashboard') }}">LLM Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>Tickets for Project: {{ project_key }}</h2>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Back to Projects</a>
+    </div>
+    
+    {% if tickets %}
+      {% for ticket in tickets %}
+      <div class="card ticket-card" id="ticket-{{ ticket.key }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">
+            <a href="{{ jira_url }}/browse/{{ ticket.key }}" target="_blank">{{ ticket.key }}</a>: 
+            {{ ticket.fields.summary }}
+          </h5>
+          {% if llm_available %}
+          <button class="btn btn-sm btn-primary analyze-btn" data-ticket="{{ ticket.key }}">
+            Analyze with AI
+          </button>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <p><strong>Status:</strong> {{ ticket.fields.status.name }}</p>
+            </div>
+            <div class="col-md-3">
+              <p><strong>Priority:</strong> {{ ticket.fields.priority.name }}</p>
+            </div>
+            <div class="col-md-3">
+              <p><strong>Reporter:</strong> {{ ticket.fields.reporter.displayName }}</p>
+            </div>
+            <div class="col-md-3">
+              <p><strong>Created:</strong> {{ ticket.fields.created.split('T')[0] }}</p>
+            </div>
+          </div>
+          
+          <div class="loading-spinner" id="loading-{{ ticket.key }}">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Analyzing ticket...</p>
+          </div>
+          
+          <div class="analysis-section" id="analysis-{{ ticket.key }}">
+            <h6 class="border-bottom pb-2 mb-3">AI Analysis</h6>
+            <div class="row">
+              <div class="col-md-4">
+                <div class="card mb-3">
+                  <div class="card-header bg-info text-white">
+                    <strong>Summary</strong>
+                  </div>
+                  <div class="card-body" id="summary-{{ ticket.key }}">
+                    <!-- AI Summary will appear here -->
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card mb-3">
+                  <div class="card-header bg-success text-white">
+                    <strong>Category</strong>
+                  </div>
+                  <div class="card-body" id="category-{{ ticket.key }}">
+                    <!-- AI Category will appear here -->
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card mb-3">
+                  <div class="card-header bg-warning">
+                    <strong>Response Suggestion</strong>
+                  </div>
+                  <div class="card-body" id="response-{{ ticket.key }}">
+                    <!-- AI Response Suggestion will appear here -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="alert alert-info">No tickets found for this project.</div>
+    {% endif %}
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  {% if llm_available %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Add click handlers for analyze buttons
+      const analyzeButtons = document.querySelectorAll('.analyze-btn');
+      analyzeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+          const ticketKey = this.getAttribute('data-ticket');
+          analyzeTicket(ticketKey);
+        });
+      });
+      
+      // Function to analyze a ticket
+      function analyzeTicket(ticketKey) {
+        // Show loading spinner
+        document.getElementById(`loading-${ticketKey}`).style.display = 'block';
+        
+        // Hide any previous analysis
+        document.getElementById(`analysis-${ticketKey}`).style.display = 'none';
+        
+        // Make API call to analyze the ticket
+        fetch(`/ticket/${ticketKey}/analyze`)
+          .then(response => response.json())
+          .then(data => {
+            // Hide loading spinner
+            //document.getElementById(`loading-${ticketKey}`).style.display = 'none';
+            
+            // Populate analysis sections
+            document.getElementById(`summary-${ticketKey}`).textContent = data.summary;
+            document.getElementById(`category-${ticketKey}`).textContent = data.category;
+            document.getElementById(`response-${ticketKey}`).textContent = data.response_suggestion;
+            
+            // Show analysis section
+            document.getElementById(`analysis-${ticketKey}`).style.display = 'block';
+          })
+          .catch(error => {
+            console.error('Error analyzing ticket:', error);
+            document.getElementById(`loading-${ticketKey}`).style.display = 'none';
+            alert('Error analyzing ticket. Please try again.');
+          });
+      }
+    });
+  </script>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>System Diagnostics</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="#">Jira Dashboard</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('diagnostics') }}">Diagnostics</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h2 class="mb-4">🔍 System Diagnostics</h2>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    
+    <div class="card mb-4">
+      <div class="card-header">
+        <h4>System Information</h4>
+      </div>
+      <div class="card-body">
+        <table class="table">
+          <tr>
+            <th width="200">Flask Version:</th>
+            <td>{{ flask_version }}</td>
+          </tr>
+          <tr>
+            <th>Python Version:</th>
+            <td>{{ python_version }}</td>
+          </tr>
+          <tr>
+            <th>Debug Mode:</th>
+            <td>
+              {% if debug_mode %}
+                <span class="badge bg-success">Enabled</span>
+              {% else %}
+                <span class="badge bg-danger">Disabled</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th>LLM Service:</th>
+            <td>
+              {% if llm_available %}
+                <span class="badge bg-success">Available</span>
+              {% else %}
+                <span class="badge bg-danger">Unavailable</span>
+                <small class="text-muted ms-2">Check .env file and API key</small>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    
+    <div class="card mb-4">
+      <div class="card-header">
+        <h4>Jira Connection</h4>
+      </div>
+      <div class="card-body">
+        {% if jira_connected %}
+          <div class="alert alert-success">
+            <strong>✅ Connected to Jira</strong>
+            <p>URL: {{ jira_url }}</p>
+          </div>
+        {% else %}
+          <div class="alert alert-warning">
+            <strong>⚠️ Not Connected to Jira</strong>
+            <p>Please log in first.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    
+    {% if llm_available %}
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h4>LLM Service Test</h4>
+        <button class="btn btn-primary" id="testLlmBtn">Test LLM</button>
+      </div>
+      <div class="card-body">
+        <div id="llmTestResult" style="display: none;">
+          <h5>Test Result:</h5>
+          <div class="alert" id="llmResultAlert">
+            <div class="spinner-border spinner-border-sm me-2" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            Testing LLM service...
+          </div>
+          <div id="llmResponseContainer" style="display: none;">
+            <h5>LLM Response:</h5>
+            <pre class="p-3 bg-light rounded" id="llmResponseText"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+    <div class="card mb-4">
+      <div class="card-header">
+        <h4>Installed Packages</h4>
+      </div>
+      <div class="card-body">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Package</th>
+              <th>Version</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for package in packages %}
+            <tr>
+              <td>{{ package.name }}</td>
+              <td>{{ package.version }}</td>
+              <td>
+                {% if package.required and package.installed %}
+                  <span class="badge bg-success">Installed</span>
+                {% elif package.required and not package.installed %}
+                  <span class="badge bg-danger">Missing</span>
+                {% else %}
+                  <span class="badge bg-secondary">Optional</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <div class="mb-4">
+      <h4>Actions</h4>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Go to Dashboard</a>
+        {% if llm_available %}
+        <a href="{{ url_for('llm_dashboard') }}" class="btn btn-success">LLM Dashboard</a>
+        {% endif %}
+        <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary">Logout</a>
+      </div>
+    </div>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  {% if llm_available %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const testLlmBtn = document.getElementById('testLlmBtn');
+      const llmTestResult = document.getElementById('llmTestResult');
+      const llmResultAlert = document.getElementById('llmResultAlert');
+      const llmResponseContainer = document.getElementById('llmResponseContainer');
+      const llmResponseText = document.getElementById('llmResponseText');
+      
+      testLlmBtn.addEventListener('click', function() {
+        // Show the result container
+        llmTestResult.style.display = 'block';
+        llmResultAlert.className = 'alert alert-info';
+        llmResultAlert.innerHTML = `
+          <div class="spinner-border spinner-border-sm me-2" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          Testing LLM service...
+        `;
+        llmResponseContainer.style.display = 'none';
+        
+        // Call the API to test the LLM service
+        fetch('/llm_status')
+          .then(response => response.json())
+          .then(data => {
+            if (data.status === 'available') {
+              llmResultAlert.className = 'alert alert-success';
+              llmResultAlert.textContent = '✅ ' + data.message;
+              
+              // Show the response
+              llmResponseContainer.style.display = 'block';
+              llmResponseText.textContent = data.test_response;
+            } else {
+              llmResultAlert.className = 'alert alert-danger';
+              llmResultAlert.textContent = '❌ ' + data.message;
+            }
+          })
+          .catch(error => {
+            llmResultAlert.className = 'alert alert-danger';
+            llmResultAlert.textContent = '❌ Error testing LLM service: ' + error.message;
+          });
+      });
+    });
+  </script>
+  {% endif %}
+</body>
+</html>

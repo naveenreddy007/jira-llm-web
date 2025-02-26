@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jira AI Chat</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    .chat-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .chat-box {
+      height: 400px;
+      overflow-y: auto;
+      border: 1px solid #dee2e6;
+      border-radius: 0.25rem;
+      padding: 15px;
+      background-color: #f8f9fa;
+      margin-bottom: 20px;
+    }
+    .user-message {
+      background-color: #d1ecf1;
+      border-radius: 15px 15px 0 15px;
+      padding: 10px 15px;
+      margin-bottom: 10px;
+      max-width: 80%;
+      margin-left: auto;
+    }
+    .ai-message {
+      background-color: #e2e3e5;
+      border-radius: 15px 15px 15px 0;
+      padding: 10px 15px;
+      margin-bottom: 10px;
+      max-width: 80%;
+    }
+    .message-time {
+      font-size: 0.75rem;
+      color: #6c757d;
+      margin-top: 5px;
+    }
+    .typing-indicator {
+      display: none;
+      padding: 10px;
+      background-color: #e2e3e5;
+      border-radius: 15px;
+      margin-bottom: 10px;
+      width: 70px;
+    }
+    .typing-indicator span {
+      height: 10px;
+      width: 10px;
+      margin: 0 5px;
+      background-color: #6c757d;
+      border-radius: 50%;
+      display: inline-block;
+      opacity: 0.4;
+    }
+    .typing-indicator span:nth-child(1) {
+      animation: pulse 1s infinite;
+    }
+    .typing-indicator span:nth-child(2) {
+      animation: pulse 1s infinite 0.2s;
+    }
+    .typing-indicator span:nth-child(3) {
+      animation: pulse 1s infinite 0.4s;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="#">Jira AI Chat</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('llm_dashboard') }}">LLM Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link active" href="{{ url_for('llm_chat') }}">AI Chat</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <div class="chat-container">
+      <h2 class="mb-4">💬 Chat with AI Assistant</h2>
+      
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      
+      <div class="chat-box" id="chatBox">
+        <div class="ai-message">
+          Hello! I'm your Jira AI assistant. How can I help you today? You can ask me about your Jira projects, tickets, or any other Jira-related questions.
+          <div class="message-time">Just now</div>
+          {% if debug_info %}
+          <div class="mt-4 p-3 bg-light rounded">
+            <h5>Debug Information</h5>
+            <pre class="mb-0">{{ debug_info | tojson(indent=2) }}</pre>
+          </div>
+          {% endif %}
+        </div>
+        
+        {% if question %}
+          <div class="user-message">
+            {{ question }}
+            <div class="message-time">Just now</div>
+          </div>
+          
+          <div class="ai-message">
+            {{ response }}
+            <div class="message-time">Just now</div>
+          </div>
+        {% endif %}
+        
+        <div class="typing-indicator" id="typingIndicator">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+      
+      <form method="POST" id="chatForm">
+        <div class="input-group">
+          <input type="text" class="form-control" name="question" id="questionInput" placeholder="Ask a question..." required>
+          <buton class="btn btn-primary" type="submit">
+            <i class="bi bi-send"></i> Send
+          </button>
+        </div>
+        
+        <div class="mt-3">
+          <p class="text-muted">Suggested questions:</p>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary suggestion-btn">
+              What are my highest priority tickets?
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary suggestion-btn">
+              Summarize the DEMO project status
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary suggestion-btn">
+              What tickets are assigned to me?
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary suggestion-btn">
+              Find tickets due this week
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+ 
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const chatBox = document.getElementById('chatBox');
+      const chatForm = document.getElementById('chatForm');
+      const questionInput = document.getElementById('questionInput');
+      const typingIndicator = document.getElementById('typingIndicator');
+      const suggestionButtons = document.querySelectorAll('.suggestion-btn');
+      
+      // Scroll to bottom of chat
+      chatBox.scrollTop = chatBox.scrollHeight;
+      
+      // Handle form submission - FIXED VERSION
+      chatForm.addEventListener('submit', function(event) {
+        // Don't prevent default - we want the normal form submission
+        // event.preventDefault();  <- REMOVE THIS LINE
+        
+        const question = questionInput.value.trim();
+        if (question === '') {
+          event.preventDefault(); // Only prevent if empty
+          return;
+        }
+        
+        console.log("Submitting question:", question);
+        
+        // Show typing indicator
+        if (typingIndicator) {
+          typingIndicator.style.display = 'block';
+        }
+        
+        // Let the form submit normally to the server
+        // No need to manually submit with this.submit()
+      });
+      
+      // Handle suggestion buttons
+      suggestionButtons.forEach(button => {
+        button.addEventListener('click', function() {
+          questionInput.value = this.textContent.trim();
+          questionInput.focus();
+          
+          // Optional: Auto-submit when clicking a suggestion
+          chatForm.submit();
+        });
+      });
+    });
+  </script>
+    
+</body>
+</html>
