@@ -10,17 +10,28 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-# Load the updated LLM service
-try:
-    from llm_service import get_llm_service, summarize_ticket, categorize_ticket, generate_response_suggestion, analyze_project_tickets
-    llm_module_imported = True
-except ImportError as e:
-    print(f"WARNING: Error importing llm_service module: {e}")
-    llm_module_imported = False
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
+
+# Load the LLM service
+try:
+    from llm_service import get_llm_service, summarize_ticket, categorize_ticket, generate_response_suggestion, analyze_project_tickets
+    llm_module_imported = True
+    logger.info("Successfully imported llm_service module")
+except ImportError as e:
+    logger.warning(f"Error importing llm_service module: {e}")
+    llm_module_imported = False
+
+# Try to import the JiraLLMIntegration
+try:
+    from jira_llm_integration import JiraLLMIntegration
+    jira_llm_imported = True
+    logger.info("Successfully imported JiraLLMIntegration")
+except ImportError as e:
+    logger.warning(f"Error importing jira_llm_integration module: {e}")
+    jira_llm_imported = False
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")  # Get from env or use default
@@ -31,13 +42,22 @@ llm_service = None
 if llm_module_imported:
     try:
         llm_service = get_llm_service()
-        print("INFO: LLM service initialized successfully")
+        logger.info("LLM service initialized successfully")
         # Test the connection immediately
         test_response = llm_service.generate_response("Test connection")
-        print(f"INFO: LLM test response: {test_response[:50]}...")
+        logger.info(f"LLM test response: {test_response[:50]}...")
     except Exception as e:
-        print(f"WARNING: Failed to initialize LLM service: {str(e)}")
-        print("Check your DEEPSEEK_API_KEY in .env file and ensure it's valid")
+        logger.warning(f"Failed to initialize LLM service: {str(e)}")
+        logger.warning("Check your DEEPSEEK_API_KEY in .env file and ensure it's valid")
+
+# Initialize the JiraLLMIntegration class AFTER llm_service is initialized
+jira_llm = None
+if jira_llm_imported and llm_service:
+    try:
+        jira_llm = JiraLLMIntegration(llm_service)
+        logger.info("JiraLLMIntegration initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize JiraLLMIntegration: {str(e)}")
 
 def get_auth_headers(pat):
     """Return headers for Jira authentication."""
@@ -198,7 +218,6 @@ def analyze_ticket(ticket_key):
     
     try:
         # Extract relevant ticket information for LLM
-        # Extract relevant ticket information for LLM
         fields = ticket_data["fields"]
         ticket_info = {
             "summary": fields.get("summary", ""),
@@ -219,7 +238,7 @@ def analyze_ticket(ticket_key):
             "response_suggestion": response
         })
     except Exception as e:
-        print(f"ERROR in analyze_ticket: {e}")
+        logger.error(f"ERROR in analyze_ticket: {e}")
         return jsonify({
             "error": f"Error during analysis: {str(e)}",
             "summary": "An error occurred during analysis.",
@@ -248,7 +267,7 @@ def llm_chat():
         jira_url = session["jira_url"]
         pat = session["pat"]
         
-        print(f"Processing question: '{question}'")
+        logger.debug(f"Processing question: '{question}'")
         
         # First, try to get all projects
         projects = []
@@ -258,19 +277,19 @@ def llm_chat():
             
             if projects_response.status_code == 200:
                 projects = projects_response.json()
-                print(f"Found {len(projects)} projects")
+                logger.debug(f"Found {len(projects)} projects")
         except Exception as e:
-            print(f"Error fetching projects: {str(e)}")
+            logger.error(f"Error fetching projects: {str(e)}")
         
         # If we have projects, try to get tickets from the first one
         project_key = None
         if projects:
             project_key = projects[0].get('key')
-            print(f"Using project key: {project_key}")
+            logger.debug(f"Using project key: {project_key}")
         else:
             # Default to DEMO if no projects found
             project_key = "DEMO"
-            print(f"No projects found, defaulting to {project_key}")
+            logger.debug(f"No projects found, defaulting to {project_key}")
         
         # Try to get tickets using any valid JQL
         try:
@@ -278,28 +297,28 @@ def llm_chat():
             jql = f"project = {project_key} ORDER BY created DESC"
             search_url = f"{jira_url}/rest/api/2/search?jql={jql}&maxResults=5"
             
-            print(f"Fetching tickets with URL: {search_url}")
+            logger.debug(f"Fetching tickets with URL: {search_url}")
             response = requests.get(search_url, headers=get_auth_headers(pat), timeout=10)
             
             if response.status_code == 200:
                 results = response.json()
                 jira_data = results.get("issues", [])
-                print(f"Found {len(jira_data)} tickets")
+                logger.debug(f"Found {len(jira_data)} tickets")
             else:
-                print(f"Error fetching tickets: {response.status_code}")
+                logger.warning(f"Error fetching tickets: {response.status_code}")
                 # Try without project filter as fallback
                 jql = "ORDER BY created DESC"
                 search_url = f"{jira_url}/rest/api/2/search?jql={jql}&maxResults=5"
                 
-                print(f"Trying again with simple JQL: {search_url}")
+                logger.debug(f"Trying again with simple JQL: {search_url}")
                 response = requests.get(search_url, headers=get_auth_headers(pat), timeout=10)
                 
                 if response.status_code == 200:
                     results = response.json()
                     jira_data = results.get("issues", [])
-                    print(f"Found {len(jira_data)} tickets with fallback query")
+                    logger.debug(f"Found {len(jira_data)} tickets with fallback query")
         except Exception as e:
-            print(f"Error fetching tickets: {str(e)}")
+            logger.error(f"Error fetching tickets: {str(e)}")
         
         # Create a formatted representation of tickets
         tickets_text = ""
@@ -327,7 +346,7 @@ def llm_chat():
             "prompt_length": len(full_prompt)
         }
         
-        print(f"Sending prompt to LLM (length: {len(full_prompt)} chars)")
+        logger.debug(f"Sending prompt to LLM (length: {len(full_prompt)} chars)")
         
         try:
             # Generate response with appropriate system prompt
@@ -339,9 +358,9 @@ If you have Jira ticket data available, use it to answer the question. If not, e
                 system_prompt=system_prompt
             )
             
-            print(f"Received response from LLM (length: {len(response)} chars)")
+            logger.debug(f"Received response from LLM (length: {len(response)} chars)")
         except Exception as e:
-            print(f"Error generating response: {str(e)}")
+            logger.error(f"Error generating response: {str(e)}")
             flash(f"Error generating response: {str(e)}", "danger")
             response = f"I'm sorry, but I encountered an error while processing your request: {str(e)}"
     
@@ -350,7 +369,6 @@ If you have Jira ticket data available, use it to answer the question. If not, e
                           response=response,
                           llm_available=llm_service is not None,
                           debug_info=debug_info)
-# Add this route to your existing app.py file
 
 @app.route("/simple_chat", methods=["GET", "POST"])
 def simple_chat():
@@ -462,10 +480,6 @@ def debug_ticket(ticket_key):
         "llm_available": llm_service is not None
     })
 
-import logging
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('werkzeug').setLevel(logging.INFO)
-
 @app.route("/diagnostics")
 def diagnostics():
     """Show system diagnostic information."""
@@ -510,15 +524,92 @@ def diagnostics():
                           jira_url=jira_url,
                           packages=packages)
 
+# ===============================================
+# NEW SMART QUERY ROUTES
+# ===============================================
+
+@app.route("/smart_query", methods=["GET"])
+def smart_query_page():
+    """Page for entering natural language queries for Jira."""
+    if "jira_url" not in session or "pat" not in session:
+        flash("⚠️ Please log in first.", "warning")
+        return redirect(url_for("login"))
+    
+    if not jira_llm:
+        flash("⚠️ LLM integration is not available. Please check API keys and logs.", "warning")
+    
+    # Get a list of projects to help with suggestions
+    jira_url = session["jira_url"]
+    pat = session["pat"]
+    projects = fetch_all_projects(jira_url, pat)
+    
+    # Create some suggested queries based on available projects
+    suggested_queries = [
+        "Show all high priority tickets",
+        "Find bugs reported in the last week",
+        "Show tickets assigned to me",
+    ]
+    
+    # Add project-specific suggestions if we have projects
+    if projects:
+        project_keys = [p.get('key') for p in projects[:3]]  # First 3 projects
+        for key in project_keys:
+            suggested_queries.append(f"Show all open tickets in {key} project")
+    
+    return render_template("smart_query.html",
+                          projects=projects,
+                          suggested_queries=suggested_queries,
+                          llm_available=jira_llm is not None)
+
+@app.route("/execute_query", methods=["POST"])
+def execute_smart_query():
+    """Execute a natural language query against Jira."""
+    if "jira_url" not in session or "pat" not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    if not jira_llm:
+        return jsonify({
+            "success": False,
+            "error": "LLM integration not available",
+            "message": "LLM service is not configured. Please check API keys and logs."
+        }), 200  # Return 200 so the UI can display the error message
+    
+    # Get the natural language query
+    natural_language_query = request.form.get("query", "")
+    if not natural_language_query:
+        return jsonify({"success": False, "error": "Empty query"}), 400
+    
+    # Process the query
+    jira_url = session["jira_url"]
+    pat = session["pat"]
+    
+    try:
+        # Process the query through our JiraLLMIntegration class
+        logger.info(f"Processing query: {natural_language_query}")
+        result = jira_llm.process_natural_language_query(
+            jira_url, pat, natural_language_query
+        )
+        
+        # Return the full result for rendering in the UI
+        return jsonify(result)
+    
+    except Exception as e:
+        logger.error(f"Error processing query: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": "Error processing query",
+            "message": str(e)
+        }), 200  # Return 200 so the UI can display the error
+
 # Modify the app.run section at the bottom
 if __name__ == "__main__":
     # Print application status
-    print(f"INFO: Starting Flask app with LLM service: {llm_service is not None}")
+    logger.info(f"Starting Flask app with LLM service: {llm_service is not None}")
     if llm_service is None:
-        print("WARNING: LLM features will be disabled.")
+        logger.warning("LLM features will be disabled.")
     
     try:
         app.run(debug=True)
     except Exception as e:
-        print(f"CRITICAL ERROR: {str(e)}")
-        print(traceback.format_exc())
+        logger.critical(f"CRITICAL ERROR: {str(e)}")
+        logger.critical(traceback.format_exc())
