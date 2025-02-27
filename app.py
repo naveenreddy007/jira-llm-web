@@ -561,6 +561,89 @@ def smart_query_page():
                           suggested_queries=suggested_queries,
                           llm_available=jira_llm is not None)
 
+# Add to your app.py
+# """Create a comment on a Jira ticket."""
+    if "jira_url" not in session or "pat" not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    jira_url = session["jira_url"]
+    pat = session["pat"]
+    comment_text = request.form.get("comment", "")
+    
+    # Call Jira API to add comment
+    comment_url = f"{jira_url}/rest/api/2/issue/{ticket_key}/comment"
+    payload = {"body": comment_text}
+    
+    try:
+        response = requests.post(
+            comment_url, 
+            headers=get_auth_headers(pat),
+            json=payload,
+            timeout=10
+        )
+        
+        if response.status_code in [201, 200]:
+            return jsonify({
+                "success": True,
+                "message": "Comment added successfully"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to add comment: {response.status_code}",
+                "details": response.text
+            })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Exception: {str(e)}"
+        })
+@app.route("/ticket/<ticket_key>/comment", methods=["POST"])
+def add_ticket_comment(ticket_key):
+    """Add a comment to a Jira ticket."""
+    if "jira_url" not in session or "pat" not in session:
+        return jsonify({"success": False, "error": "Not authenticated"}), 401
+    
+    jira_url = session["jira_url"]
+    pat = session["pat"]
+    comment_text = request.form.get("comment", "")
+    
+    if not comment_text:
+        return jsonify({"success": False, "error": "Empty comment"}), 400
+    
+    try:
+        # API endpoint for adding comments
+        comment_url = f"{jira_url}/rest/api/2/issue/{ticket_key}/comment"
+        
+        # Prepare the payload
+        payload = {
+            "body": comment_text
+        }
+        
+        # Make the API call
+        response = requests.post(
+            comment_url,
+            headers=get_auth_headers(pat),
+            json=payload,
+            timeout=15
+        )
+        
+        # Handle the response
+        if response.status_code in [200, 201]:
+            app.logger.info(f"Comment added successfully to {ticket_key}")
+            return jsonify({"success": True, "message": "Comment added successfully"})
+        else:
+            app.logger.error(f"Failed to add comment: {response.status_code} - {response.text}")
+            return jsonify({
+                "success": False, 
+                "error": f"Failed to add comment: {response.status_code}",
+                "details": response.text
+            })
+    
+    except Exception as e:
+        app.logger.error(f"Exception adding comment: {str(e)}")
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route("/execute_query", methods=["POST"])
 def execute_smart_query():
     """Execute a natural language query against Jira."""
